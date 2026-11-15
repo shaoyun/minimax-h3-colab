@@ -636,7 +636,7 @@ function runCard(r) {
     ${fin ? `<video controls preload="metadata" src="${fin}"></video>` : ""}
     ${segs}
     ${r.status === "planning" || r.status === "generating" ? `<div class="revise"><button class="pill small" data-ract="stop">停止</button></div>` :
-      r.plan ? `<div class="revise"><input placeholder="想改什么？例：第二段改成下雨，她撑著伞" maxlength="200"><button class="pill small blue" data-ract="revise">✏️ 修改</button></div>` : ""}
+      r.plan ? `<div class="revise"><input placeholder="想改什么？例：第二段改成下雨，她撑着伞" maxlength="200"><button class="pill small blue" data-ract="revise">✏️ 修改</button></div>` : ""}
     <div class="rlog">${(r.log || []).slice(-4).map(l => esc(l[1])).join("<br>")}</div></div>`;
 }
 
