@@ -9,6 +9,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 api = json.load(io.open('workflows/H3_digital_human_api.json', encoding='utf-8'))
 fix_src = io.open('tools/userdata_slash_fix.py', encoding='utf-8').read()
+chunk_ffn_src = io.open('tools/h3_chunk_ffn.py', encoding='utf-8').read()
 ui_wf = io.open('workflows/H3_digital_human.json', encoding='utf-8').read()
 sample_prompt = api['7']['inputs']['prompt']
 api['7']['inputs']['prompt'] = ''
@@ -47,7 +48,7 @@ cells = [
 模型：`Minimax-h3_Singularity_x_10Eros-Max_PRISM`（int8，加速已融合，6 步）＋官方 Qwen3-VL 文字編碼器與 VAE。授權依照各來源模型。
 
 最新版：<https://github.com/dseditor/minimax-h3-colab>"""),
-    code("#@title ① 檢查環境＋安裝 ComfyUI（GPU 或驅動不符就停下，不會安裝）\nFIX_SRC = " + repr(fix_src) + """
+    code("#@title ① 檢查環境＋安裝 ComfyUI（GPU 或驅動不符就停下，不會安裝）\nFIX_SRC = " + repr(fix_src) + "\nCHUNK_FFN_SRC = " + repr(chunk_ffn_src) + """
 import torch, shutil, subprocess, sys, os
 from pathlib import Path
 if not torch.cuda.is_available():
@@ -84,6 +85,9 @@ subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-r', str(LH / 're
 FIX = COMFY / 'custom_nodes' / 'colab_userdata_slash_fix'
 FIX.mkdir(parents=True, exist_ok=True)
 (FIX / '__init__.py').write_text(FIX_SRC, encoding='utf-8')
+CHUNK_FFN = COMFY / 'custom_nodes' / 'h3_chunk_ffn'
+CHUNK_FFN.mkdir(parents=True, exist_ok=True)
+(CHUNK_FFN / '__init__.py').write_text(CHUNK_FFN_SRC, encoding='utf-8')
 # 節點管理器（ComfyUI-Manager 已併入官方，用 pip 套件＋啟動旗標 --enable-manager）
 if (COMFY / 'manager_requirements.txt').exists():
     subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-r', str(COMFY / 'manager_requirements.txt')], check=True)
@@ -92,7 +96,7 @@ out = subprocess.run([sys.executable, '-c', 'import torch;print(torch.__version_
 print('ComfyUI 會用的 PyTorch：', out.stdout.strip(), out.stderr[-300:])
 """),
     code("#@title ② 啟動 ComfyUI（背景執行）＋把 H3 數字人工作流放進清單\nUI_WORKFLOW = " + repr(ui_wf) + """
-import subprocess, time, urllib.request, sys
+import subprocess, time, urllib.request, sys, os
 # --enable-cors-header：經 cloudflare 通道開介面時，瀏覽器的 Origin（trycloudflare 網址）
 # 跟轉進來的 Host（127.0.0.1）對不上，ComfyUI 預設會回 403「存取遭拒」；開這個旗標才放行。
 if 'server' in globals() and server.poll() is None:
@@ -112,6 +116,7 @@ old_cn = wf_dir / 'H3數字人.json'
 if old_cn.exists(): old_cn.unlink()
 Path('/content/H3_digital_human.json').write_text(UI_WORKFLOW, encoding='utf-8')
 log = open('/content/comfyui.log', 'w')
+os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
 server = subprocess.Popen([sys.executable, 'main.py', '--listen', '127.0.0.1', '--port', '8188', '--enable-cors-header', '--enable-manager', '--enable-compress-response-body'],
                           cwd=str(COMFY), stdout=log, stderr=subprocess.STDOUT)
 for i in range(180):
@@ -340,7 +345,7 @@ TOYBOX = [
 模型：`Minimax-h3_Singularity_x_10Eros-Max_PRISM`（int8）＋官方 Qwen3-VL 文字編碼器與 VAE；LoRA、語意橋、潛空間放大器與改寫模型鏡像在 [dseditor/minimax-h3-studio-assets](https://huggingface.co/dseditor/minimax-h3-studio-assets)（各檔來源見該頁）。授權依照各來源模型。
 
 最新版：<https://github.com/dseditor/minimax-h3-colab>"""),
-    code("""#@title ① 檢查環境＋安裝 ComfyUI、節點與 H3 Toybox（GPU 或驅動不符就停下，不會安裝）
+    code("#@title ① 檢查環境＋安裝 ComfyUI、節點與 H3 Toybox（GPU 或驅動不符就停下，不會安裝）\nCHUNK_FFN_SRC = " + repr(chunk_ffn_src) + """
 import torch, shutil, subprocess, sys, os
 from pathlib import Path
 if not torch.cuda.is_available():
@@ -383,6 +388,9 @@ NODES = {
 }
 for name, url in NODES.items():
     clone(url, COMFY / 'custom_nodes' / name)
+CHUNK_FFN = COMFY / 'custom_nodes' / 'h3_chunk_ffn'
+CHUNK_FFN.mkdir(parents=True, exist_ok=True)
+(CHUNK_FFN / '__init__.py').write_text(CHUNK_FFN_SRC, encoding='utf-8')
 # 導演 Skill 只是文字檔：放在 custom_nodes 外面，不載入它的節點
 clone('https://github.com/T8mars/comfyui-minimax-h3-prompt-enhancer-T8', '/content/t8-enhancer')
 # H3 Toybox 本體
@@ -502,6 +510,7 @@ for old in old_dirs:
             if f.is_file() and not (videos / f.name).exists():
                 shutil.move(str(f), str(videos / f.name))
 # ComfyUI 只當引擎：只聽 127.0.0.1，不對外開介面
+os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
 server = subprocess.Popen([sys.executable, 'main.py', '--listen', '127.0.0.1', '--port', '8188',
                            '--output-directory', str(output_root)],
                           cwd=str(COMFY), stdout=open('/content/comfyui.log', 'w'), stderr=subprocess.STDOUT)

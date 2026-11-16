@@ -28,7 +28,7 @@ SelfLift 採樣器會把 `minimax_keyframes` 縮到低解析度階段，所以�
 
 ## 工作流改動（相對 WF.json）
 
-- 拿掉只為預覽存在的 `MiniMaxChunkFeedForward`(401) 與 `ModelPreviewOverrideKJ`(329)，SigmaShift(333) 直接接 scheduler／sampler
+- 拿掉只為預覽存在的 `ModelPreviewOverrideKJ`(329)；`MiniMaxChunkFeedForward`(401) 僅在 1080P 且單卡 VRAM < 28 GiB（如 L4）時按需啟用（480P／720P 与 A100 等大顯存卡自動旁路，零開銷）
 - `VHS_VideoCombine` 換成內建 `CreateVideo` ＋ `SaveVideo`（存到 `output/H3Toybox/`）
 - 需要的外掛：T8 audio（Semantic Bridge）、SelfLift、H3 Motion Context
 

@@ -128,10 +128,10 @@ DEFAULT_CONFIG = {
 IMAGE_SIZES = {"1K": 1024, "1.3K": 1344, "1.6K": 1664, "2K": 2048, "2.7K": 2720}  # P-H3 is best at 2K+
 
 # Node ids in WF.json that the server rewires
-N_COND, N_SAMPLER, N_SCHED, N_SHIFT, N_BRIDGE = "265", "397", "261", "333", "402"
+N_COND, N_SAMPLER, N_SCHED, N_SHIFT, N_BRIDGE, N_CHUNK = "265", "397", "261", "333", "402", "401"
 N_VAE, N_AVAE, N_CLIP, N_LEN, N_SECONDS = "36", "37", "38", "250", "259"
 N_DECODE, N_ADECODE = "253", "254"
-PREVIEW_ONLY = ("401", "329", "364", "51", "252")  # ChunkFeedForward + preview override + VHS + sample inputs
+PREVIEW_ONLY = ("329", "364", "51", "252")  # preview override + VHS + sample inputs
 N_IMG_ENC, N_IMG_SAMPLER, N_IMG_SAVE = "ienc", "isamp", "isave"  # node ids of the 🖼 图片 graph
 
 SYSTEM_REF = (
@@ -271,6 +271,22 @@ def queue_prompt(cfg, wf):
 
 def history_entry(cfg, prompt_id):
     return comfy(cfg, f"/history/{prompt_id}").get(prompt_id)
+
+
+_HAS_CHUNK_FFN = False
+
+
+def has_chunk_ffn(cfg):
+    global _HAS_CHUNK_FFN
+    if _HAS_CHUNK_FFN:
+        return True
+    try:
+        info = comfy(cfg, "/object_info/MiniMaxChunkFeedForward", timeout=5)
+        if "MiniMaxChunkFeedForward" in (info or {}):
+            _HAS_CHUNK_FFN = True
+    except Exception:
+        pass
+    return _HAS_CHUNK_FFN
 
 
 def wait_prompt(cfg, prompt_id, timeout=1800):
@@ -1173,12 +1189,17 @@ def bypass(wf, node_id, port="model"):
 def build_generate(cfg, final_text, chosen, task, req, size, src_job=None):
     wf = json.loads(TEMPLATE_PATH.read_text(encoding="utf-8"))
     # preview-only nodes are not needed behind a web frontend
-    for node_id in ("329", "401"):
-        if node_id in wf:
-            bypass(wf, node_id)
+    if "329" in wf:
+        bypass(wf, "329")
     for node_id in PREVIEW_ONLY:
         wf.pop(node_id, None)
     width, height = size
+    if N_CHUNK in wf:
+        if min(width, height) >= 1000 and has_chunk_ffn(cfg):
+            wf[N_CHUNK]["inputs"]["chunks"] = 4
+            wf[N_CHUNK]["inputs"]["seq_threshold"] = 24576
+        else:
+            bypass(wf, N_CHUNK)
 
     if task == "Ref2VA":
         ref = wf[N_COND]["inputs"]
